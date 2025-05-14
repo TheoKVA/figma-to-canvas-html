@@ -1,0 +1,19 @@
+{
+    "name": "Figma to <canvas> HTML",
+    "id": "figma-to-canvas-html",
+    "api": "1.0.0",
+    "main": "code.js",
+    "ui": "ui.html",
+    "capabilities": [],
+    "editorType": [
+        "figma"
+    ],
+    "documentAccess": "dynamic-page",
+    "enableProposedApi": false,
+    "enablePrivatePluginApi": false,
+    "networkAccess": {
+      "allowedDomains": [
+        "none"
+      ]
+    }
+}

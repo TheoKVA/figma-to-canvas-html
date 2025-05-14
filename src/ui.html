@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+</head>
+
+
+
+<!-- ========== -->
+<!-- 🌳 HTML 🌳 -->
+<!-- ========== -->
+<body>
+    <!-- MAIN CONTAINER -->
+    <div class="flex-column" style="min-height: 100vh">
+
+        <h2>Figma to &lt;canvas&gt; HTML</h2>
+        <p>CTRL+Alt+P to reload</p>
+        <button id="export">Export Selection</button>
+        <p id="log" style="font-size: 10px;">selection</p>
+        <textarea id="output" readonly style="flex: 1;"></textarea>
+        <style>
+            #output {
+                border-radius: 6px;
+                font-family: monospace; /* Use a code-style font */
+                font-size: 13px;
+                line-height: 1.4;
+                background-color: #f9f9f9;
+                color: #222;
+                white-space: pre;        /* Preserve indentation */
+                overflow: auto;
+                padding: 5px;
+                border: 1px solid #ccc;
+                tab-size: 2;             /* Makes indentation prettier */
+            }
+        </style>
+        
+    </div>
+</body>
+
+
+
+<!-- ============= -->
+<!-- 🧰 SCRIPT 🧰 -->
+<!-- ============= -->
+    
+<script>
+
+    // -----------------------
+    // ✉️ SEND A SMS TO UI ✉️
+    // -----------------------
+    function postMessage(config) {
+        parent.postMessage({ pluginMessage: config }, '*');
+    }
+
+
+    // -----------------------------
+    // 📥 RECEIVED SMS FROM CODE 📥
+    // -----------------------------
+    onmessage = (event) => {
+        const msg = event.data.pluginMessage;
+        console.log('😀 > NEW MESSAGE ' + msg.type);
+
+        if (msg.type === 'selection-update') {
+            const output = document.getElementById('log');
+            output.innerHTML = 'Live Selection:' + msg.message
+        }
+
+        if (msg.type === 'export-selection') {
+            document.getElementById('output').value = msg.data;
+
+        }
+    };
+
+
+    // ==================
+    // 📞 INTERACTION 📞
+    // ==================
+    document.getElementById('export').onclick = () => postMessage({type:'export-selection'});
+
+
+    // ------------
+    // 🚀 START 🚀
+    // ------------
+    postMessage({type:'selection-update'});
+    
+
+</script>
+  
+
+
+<!-- ============ -->
+<!-- 🌻 SYTLE 🌻 -->
+<!-- ============ -->
+
+<style>
+    
+    /* GENERAL STYLING */
+    *, *:before, *:after {
+        box-sizing: border-box;
+        margin: 0px;
+        padding: 0px;
+    }
+    html {
+        box-sizing: border-box;
+        -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+        font-family: sans-serif;
+        color: #000000;
+
+        background: rgb(255, 255, 0);
+        /* padding: 30px;  marges internes */
+        /* margin: 0px; marges externes */
+    }
+
+    /* OTHER */
+    .temp {
+        border: solid green 1px;
+    }
+    .no-click { 
+        pointer-events: none;
+    }
+    .no-select {
+        user-select: none;
+    }
+    .hidden {
+        display: none !important; 
+    }
+    .pending {
+        opacity:0.3 !important;
+        pointer-events: none;
+    }
+    .full-width {
+        width: 100%;
+    }
+    .fill-div {
+        display: block;
+        height: 100%;
+        width: 100%;
+        text-decoration: none;
+    }
+    .center {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .no-decoration { 
+        text-decoration: none; 
+    }
+
+    /* GUIDE TO FLEX : https://css-tricks.com/snippets/css/a-guide-to-flexbox/ */
+    .flex-row {
+        display: flex;
+        flex-direction: row ;
+        align-items: stretch;
+    }
+    .flex-column {
+        display: flex;
+        flex-direction: column ;
+        align-items: stretch;
+    }
+    .flex {
+        display: flex;
+        align-items: stretch;
+    }
+
+</style>
+
+</html>
