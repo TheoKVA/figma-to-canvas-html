@@ -1,15 +1,14 @@
-// ----------
-// IMAGE DATA
-// ----------
+// ----------------
+// 📀 IMAGE DATA 📀
+// ----------------
 
-// You can save it in an external .json file
+// You can save this data as an external .json file
 const imageData = {
     "bg": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...",
     "icon": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA..."
 }
   
-// Helper function to load the images
-// Either on object or a .json
+// Helper function to load the images (from varibale or a .json)
 async function loadImageData(input) {
     const imageMap = typeof input === "string" ? await fetch(input).then(res => res.json()) : input;
     const entries = await Promise.all(
@@ -32,18 +31,24 @@ async function loadImageData(input) {
 }
 
 
-// ====================
-// DRAWING INSTRUCTIONS
-// ====================
+// ==========================
+// 🖌 DRAWING INSTRUCTIONS 🖌
+// ==========================
 
 (async () => {
 
-    // Load the external images
+    // Load the images from variable or a .json file
     const images = await loadImageData(imageData);
     // const images = await loadImageData('your-image-data.json');
 
+    // Target canvas
+    // It should be of size 00px by 00px
     const canvas = document.getElementById("myCanvas");
     const ctx = canvas.getContext("2d");
+
+    // ------------
+    // INSTRUCTIONS
+    // ------------
 
     // Background
     ctx.fillStyle = "#ffffff";
