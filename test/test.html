@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Canvas Demo</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #dcd6d4;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            gap: 1rem;
+        }
+
+        canvas {
+            background: #dcd6d4;
+        }
+
+        button {
+            padding: 0.25rem 0.5rem;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="myCanvas"></canvas>
+    <button id="downloadBtn">Download as PNG</button>
+    <script src="code.js"></script>
+    <script>
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            const canvas = document.getElementById('myCanvas');
+            const link = document.createElement('a');
+            link.download = 'canvas-export.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        });
+    </script>
+</body>
+
+</html>

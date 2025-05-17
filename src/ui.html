@@ -17,13 +17,14 @@
         <p>CTRL+Alt+P to reload</p>
         <button id="export">Export Selection</button>
         <p id="log" style="font-size: 10px;">selection</p>
-        <textarea id="output" readonly style="flex: 1;"></textarea>
+        <textarea id="js-output" readonly style="flex: 1;"></textarea>
         <style>
-            #output {
+            #js-output {
+                resize: none;
                 border-radius: 6px;
                 font-family: monospace; /* Use a code-style font */
-                font-size: 10px;
-                line-height: 1.2;
+                font-size: 9px;
+                line-height: 1.1;
                 background-color: #f9f9f9;
                 color: #222;
                 white-space: pre;        /* Preserve indentation */
@@ -33,7 +34,8 @@
                 tab-size: 2;             /* Makes indentation prettier */
             }
         </style>
-        
+        <button id="js-copy" style="">Copy to clipboard</button>
+
     </div>
 </body>
 
@@ -66,7 +68,7 @@
         }
 
         if (msg.type === 'export-selection') {
-            document.getElementById('output').value = msg.data;
+            document.getElementById('js-output').value = msg.data;
 
         }
     };
@@ -76,6 +78,31 @@
     // 📞 INTERACTION 📞
     // =================
     document.getElementById('export').onclick = () => postMessage({type:'export-selection'});
+
+    const button = document.getElementById('js-copy');
+    const textarea = document.getElementById('js-output');
+    const originalLabel = button.textContent;
+
+    button.addEventListener('click', () => {
+        textarea.select();
+        textarea.setSelectionRange(0, 99999); // For mobile compatibility
+
+        const successful = document.execCommand('copy');
+        if (successful) {
+            // Unselect
+            window.getSelection().removeAllRanges();
+            textarea.blur();
+
+            // Change button text
+            button.textContent = 'Copied!';
+            setTimeout(() => {
+                button.textContent = originalLabel;
+            }, 2000);
+        } else {
+            alert('Failed to copy text.');
+        }
+    });
+
 
 
     // -----------

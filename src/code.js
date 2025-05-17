@@ -11,7 +11,7 @@
 // ---------------
 // 🚀 START UI 🚀
 // ---------------
-figma.showUI(__html__, { width: 400, height: 500 });
+figma.showUI(__html__, { width: 400, height: 600 });
 console.clear();
 console.log('🤖 Figma to <canvas> HTML backend');
 
@@ -38,11 +38,11 @@ figma.ui.onmessage = async (msg) => {
         }
         else {
             // Generate export code from selected nodes
-            try{
+            try {
                 const result = await exportSelection(selection);
                 postMessage({ type, message: 'success', data: result });
             }
-            catch(e) {
+            catch (e) {
                 console.error(e);
                 console.error(e.message);
                 console.error(e.stack);
@@ -54,10 +54,22 @@ figma.ui.onmessage = async (msg) => {
         onSelectionUpdate();
     }
 
-    // We can add more types here like 'get-fonts', 'settings-save', etc.
+    // We can add more types here
 };
 
-let finalCode = '';
+
+
+
+
+// ===============
+// 🔥 MAIN CODE 🔥
+// ===============
+
+// Our main variables
+let code, TOTAL_WIDTH, TOTAL_HEIGHT;
+// This will collect base64 strings keyed by image hash or unique ID
+const imageData = {};
+
 
 async function exportSelection(selection) {
 
@@ -67,256 +79,764 @@ async function exportSelection(selection) {
 
     // At the moment we only check the selection[0] and assume it is a frame
     // Later we will add support to groups and eclectic selection
-    const frame = selection[0]
+    const frame = selection[0];
+    TOTAL_WIDTH = frame.width;
+    TOTAL_HEIGHT = frame.height;
+
     console.log(frame);
 
-    // Start fresh
+    // Start the code fresh
     resetCode();
-    console.log('1');
 
+    // We start early, to then later determine the intro
     addCode(`
-        // ==========================
-        // 🖌 DRAWING INSTRUCTIONS 🖌
-        // ==========================
+    // Target canvas
+    const canvas = document.getElementById("myCanvas");
+    canvas.width = ${TOTAL_WIDTH};
+    canvas.height = ${TOTAL_HEIGHT};
+    const ctx = canvas.getContext("2d");
 
-        (async () => {`, 0
-    );
-    console.log('2');
-
-    addCode(`
-        // Load the images from variable or a .json file
-        const images = await loadImageData(imageData);
-        // const images = await loadImageData('your-image-data.json');
-
-        // Target <canvas>
-        const canvas = document.getElementById("myCanvas");
-        const ctx = canvas.getContext("2d");
-        canvas.width = ${frame.width};
-        canvas.height = ${frame.height};
-
-        // ------------
-        // INSTRUCTIONS
-        // ------------
-
-        // ${frame.name}
-        // -----------------------`
-    );
-
-    console.log('starting radius');
-
+    // ------------
+    // INSTRUCTIONS
+    // ------------
+    
+    // Main frame
+    // ========================= `,
+    1);
 
     // We start with the round radius of the frame itself
     if (frame.topLeftRadius || frame.topRightRadius || frame.bottomLeftRadius || frame.bottomRightRadius) {
-        let x = 0;
-        let y = 0;
-        addCode(`
-        // ${frame.name} CornerRadius clip
-        ctx.save();
-        ctx.beginPath();
-        ctx.moveTo(${x + frame.topLeftRadius}, ${y});
-        ctx.lineTo(${x + frame.width - frame.topRightRadius}, ${y});
-        ctx.quadraticCurveTo(${x + frame.width}, ${y}, ${x + frame.width}, ${y + frame.topRightRadius});
-        ctx.lineTo(${x + frame.width}, ${y + frame.height - frame.bottomRightRadius});
-        ctx.quadraticCurveTo(${x + frame.width}, ${y + frame.height}, ${x + frame.width - frame.bottomRightRadius}, ${y + frame.height});
-        ctx.lineTo(${x + frame.bottomLeftRadius}, ${y + frame.height});
-        ctx.quadraticCurveTo(${x}, ${y + frame.height}, ${x}, ${y + frame.height - frame.bottomLeftRadius});
-        ctx.lineTo(${x}, ${y + frame.topLeftRadius});
-        ctx.quadraticCurveTo(${x}, ${y}, ${x + frame.topLeftRadius}, ${y});
-        ctx.closePath();
-        ctx.clip();`);
+        clipCtxNodeOnRadius({node: frame, x: 0, y: 0, context: 'ctx', indent:2})
     }
 
-    console.log('starting fills');
-
-
-    // Then we do all the fills
-    if(frame.fills.length > 0) {
-        addCode(`
-            // ${frame.name} Fills
-            const frameFill = document.createElement('canvas');
-            frameFill.width = ${frame.width};
-            frameFill.height = ${frame.height};
-            const frameFillCtx = frameFill.getContext('2d');`
-        );
-
-        for (let i=0; i<frame.fills.length; i++) {
-            addCode(`
-                // ${frame.name} Fill #${i}`
-            );
-            
-            const fill = frame.fills[i];
-            if (fill.type === 'SOLID' && fill.opacity === 1 && fill.blendMode === 'NORMAL') {
-                const color = solidPaintToCanvasColor(fill);
-                addCode(`
-                    frameFillCtx.fillStyle = '${color}';
-                    frameFillCtx.fillRect(0, 0, ${frame.width}, ${frame.height});`
-                );
-            }
-
-            else {
-                // Composite on an offscreen canvas
-                const id = `frameFill${i}`;
-                addCode(`
-                    const ${id} = document.createElement('canvas');
-                    ${id}.width = ${frame.width};
-                    ${id}.height = ${frame.height};
-                    const ${id}Ctx = ${id}.getContext('2d');`
-                );
-
-                if (fill.type === 'SOLID') {
-                    const color = solidPaintToCanvasColor(fill);
-                    addCode(`
-                        ${id}Ctx.fillStyle = '${color}';
-                        ${id}Ctx.globalAlpha = ${fill.opacity !== undefined ? fill.opacity : 1};
-                        ${id}Ctx.fillRect(0, 0, ${frame.width}, ${frame.height});`
-                    );
-                }
-                // TODO: add gradient/image support
-
-                
-                    // frameFillCtx.globalAlpha = ${opacity};
-                    // frameFillCtx.globalCompositeOperation = '${blendMode.toLowerCase()}';
-                addCode(`
-                    frameFillCtx.save();
-                    frameFillCtx.drawImage(${id}, 0, 0);
-                    frameFillCtx.restore();`
-                );
-            }
+    // Then we do all the fill paints
+    if (frame.fills.length > 0) {
+        for (let i = 0; i < frame.fills.length; i++) {
+            await exportPaint({ paint: frame.fills[i], parent: frame, index: i+1, context: 'ctx', indent: 2 });
         }
+    }
 
-        // We draw the fills on the canvas
-        addCode(`
-            ctx.drawImage(frameFillCtx, 0, 0);`
-        );
+    // Then we make all the childrens recursivelly
+    for(const child of frame.children ) {
+
+        console.log(child);
+        // console.log(child.type);
+        // console.log(child.name);
+
+        addCode(`\n
+            // Layer '${child.name}'
+            // =========================` ,
+            1)
+
+        await exportNode({ node: child, index: 2, parentCtx: 'ctx' })
 
     }
 
-    console.log('fills ok');
-
-
-    console.log(finalCode);
-
-    return finalCode;
-}
-
-
-
-function getAbsolutePosition(node) {
-    const transform = node.absoluteTransform;
-    const x = transform[0][2];
-    const y = transform[1][2];
-    return { x, y };
-}
-
-function solidPaintToCanvasColor(paint) {
-    const r = Math.round(paint.color.r * 255);
-    const g = Math.round(paint.color.g * 255);
-    const b = Math.round(paint.color.b * 255);
-    const a = paint.opacity !== undefined ? paint.opacity : 1;
-    return `rgba(${r}, ${g}, ${b}, ${a})`;
-}
-
-
-
-
-// Helper function to add code to the finalCode
-function resetCode() {
-    finalCode = ''
-}
-function addCode(text, indent = 1) {
-    const lines = text.split('\n');
-    const indentStr = '    '.repeat(indent);
-    for (const line of lines) {
-        finalCode += indentStr + line.trimEnd() + '\n';
+    // Then we do the stroke of the frame
+    if (frame.strokeGeometry.length > 0) {
+        addCode(`\n
+            // Main frame Stroke
+            // =========================` ,
+            1);
+        await exportStroke({ node: frame, context: 'ctx', indent: 1 });
     }
+
+    addCode(`
+    })(); `,
+    0)
+
+
+    // INTRODUCTION 
+    // --------------------
+
+    // Check if any image was loaded
+    if (Object.keys(imageData).length > 0) {
+        code = `
+// ----------------
+// 📀 IMAGE DATA 📀
+// ----------------
+
+// You can save this data as an external .json file
+const imageData = ${JSON.stringify(imageData, null, 4)};
+
+// Helper function to load the images (from variable or a .json)
+async function loadImageData(input) {
+    const imageMap = typeof input === "string" ? await fetch(input).then(res => res.json()) : input;
+    return Object.fromEntries( await Promise.all(
+        Object.entries(imageMap).map(([key, src]) => {
+            return new Promise(resolve => {
+                const img = new Image();
+                img.onload = () => { console.log(\`✅ Image "\${key}" loaded.\`); resolve([key, img]); }
+                img.onerror = () => { console.log(\`❌ Image "\${key}" failed to load.\`); resolve([key, null]); };
+                img.src = src;
+            });
+        })
+    ) );
+}
+
+
+// ==========================
+// 🖌 DRAWING INSTRUCTIONS 🖌
+// ==========================
+
+(async () => {
+
+    // Load the images from variable or a .json file
+    const images = await loadImageData(imageData);
+    // const images = await loadImageData('your-image-data.json');
+` + code
+    } else {
+        // ❌ imageData is empty
+        code = `
+// ==========================
+// 🖌 DRAWING INSTRUCTIONS 🖌
+// ==========================
+
+(async () => { 
+` + code
+    }
+    
+    return code;
 }
 
 
 
-async function exportToCanvas_old(nodes) {
+// MAIN EXPORT FUNCTIONS
 
-    const children = frame.children
-        .filter(node => node.visible)
+/*
+    PAINT 'type'
+        'SOLID' ✅
+        'GRADIENT_LINEAR' ✅
+        'IMAGE' ✅
+        'GRADIENT_RADIAL'
+        'GRADIENT_ANGULAR'
+        'GRADIENT_DIAMOND'
+        'VIDEO'
+        'PATTERN'
+*/
+async function exportPaint(input) {
+    const config = {
+        paint: input.paint, // Important
+        parent: input.parent, // Important
+        context: input.context || 'ctx',
+        indent: input.indent || 2,
+        x: input.x || 0,
+        y: input.y || 0,
+        width: input.width || input.parent.width || width,
+        height: input.height || input.parent.height || height,
+        index: input.index || null,
+    }
 
-    // node.type === 'RECTANGLE'
-    for (const rect of children) {
-        const { x, y } = getAbsolutePosition(rect);
-        const width = rect.width;
-        const height = rect.height;
-        const opacity = rect.opacity !== undefined ? rect.opacity : 1;
-        const blendMode = rect.blendMode || "NORMAL";
+    const { visible, type, opacity, blendMode, color } = config.paint;
+    
+    let instructions = '';
+    
+    if (!visible) return
+    if (blendMode != 'NORMAL') {
+        const composite = convertBlendMode(blendMode);
+        if (composite !== 'source-over' && composite !== 'unsupported') {
+            instructions += `${config.context}.globalCompositeOperation = '${composite}';\n`;
+        }
+        else if(composite == 'unsupported'){
+            instructions += `// ⚠️ Blend mode "${blendMode}" is not supported in canvas. Using "source-over" (default) as fallback.`
+        }
+    }
+    if (opacity != 1) instructions += `${config.context}.globalAlpha = ${Math.round(opacity * 10000) / 10000}; \n`;
 
-        const fills = rect.fills;
-        if (!fills || fills.length === 0) continue;
 
-        // If it's a simple solid fill, normal blend, full opacity
-        if (fills.length === 1 && fills[0].type === 'SOLID' && opacity === 1 && blendMode === 'NORMAL') {
-            const fill = fills[0];
-            const color = solidPaintToCanvasColor(fill);
-            output += `
-ctx.fillStyle = '${color}';
-ctx.fillRect(${x}, ${y}, ${width}, ${height});
-`;
+    // ----------------------------------
+    if (type == 'SOLID') {
+        // Add the color
+        instructions += `${config.context}.fillStyle = "${convertColor(color)}"; \n`;
+        instructions += `${config.context}.fillRect(${config.x}, ${config.y}, ${config.width}, ${config.height});`;
+    }
+
+    // ----------------------------------
+    if (type == 'GRADIENT_LINEAR') {
+        // Generate a unique name for the graditent
+        let gradientName = `${config.parent.name.replace(/[^a-zA-Z0-9]/g, '')}_gradientFill${config.index}`;
+        // Find the x y coordinates of the handles
+        let coordinates = convertGradientTransform(config.paint.gradientTransform, config.parent);
+        // Add the gradient
+        instructions += `const ${gradientName} = ${config.context}.createLinearGradient(${coordinates[0].x}, ${coordinates[0].y}, ${coordinates[1].x}, ${coordinates[1].y}); \n`;
+        // Add the colors to the gradient
+        for (const stop of config.paint.gradientStops) {
+            instructions += `${gradientName}.addColorStop(${Math.round(stop.position * 100) / 100}, "${convertColor(stop.color)}"); \n`;
+        }
+        // Add the fill
+        instructions += `${config.context}.fillStyle = ${gradientName}; \n`;
+        instructions += `${config.context}.fillRect(${config.x}, ${config.y}, ${config.width}, ${config.height});`;
+    }
+
+    // ----------------------------------
+    if (type == 'IMAGE') {
+        if (!config.paint.imageHash) {
+            instructions += `// ⚠️ Image hash missing for image fill.\n`;
         } else {
-            // Composite on an offscreen canvas
-            const id = `tempCanvas_${rect.id.replace(/[^a-zA-Z0-9]/g, '')}`;
-            output += `
-const ${id} = document.createElement('canvas');
-${id}.width = ${width};
-${id}.height = ${height};
-const ${id}Ctx = ${id}.getContext('2d');
-`;
+            const imageId = `${config.parent.name.replace(/[^a-zA-Z0-9]/g, '')}_image${config.index}`;
+            // const base64 = await getBase64FromImageFill(config.paint, );
+            const base64 = await convertImagePaintToBase64(config.paint, config.width, config.height);
 
-            for (const fill of fills) {
-                if (fill.type === 'SOLID') {
-                    const color = solidPaintToCanvasColor(fill);
-                    output += `
-${id}Ctx.fillStyle = '${color}';
-${id}Ctx.globalAlpha = ${fill.opacity !== undefined ? fill.opacity : 1};
-${id}Ctx.fillRect(0, 0, ${width}, ${height});
-`;
-                }
-                // TODO: add gradient/image support
+            // Add to global imageData object
+            if (!imageData[imageId]) {
+                console.log('Adding data')
+                imageData[imageId] = base64;
             }
-
-            // Blend onto main canvas
-            output += `
-ctx.save();
-ctx.globalAlpha = ${opacity};
-ctx.globalCompositeOperation = '${blendMode.toLowerCase()}';
-ctx.drawImage(${id}, ${x}, ${y});
-ctx.restore();
-`;
+            // Add the istructions
+            instructions += `${config.context}.drawImage(images["${imageId}"], ${config.x}, ${config.y}, ${config.width}, ${config.height});`;
         }
     }
 
-    console.log(output)
+    // Export the code
+    addCode(` 
+        // ${type.toLowerCase()} paint ${config.index || ''}
+        ${config.context}.save();
+        ${instructions}
+        ${config.context}.restore(); `,
+        config.indent)
+}
+async function exportStroke(input) {
+    const config = {
+        node: input.node, // Important
+        context: input.context || 'ctx',
+        indent: input.indent || 1,
+        x: input.x || 0,
+        y: input.y || 0,
+    }
+
+    const { 
+        strokeGeometry, 
+        strokes, 
+        strokeTopWeight, 
+        strokeBottomWeight,
+        strokeLeftWeight, 
+        strokeRightWeight,
+        strokeAlign } = config.node;
+
+    let width, height, x, y, deltaX, deltaY;
+    
+    // First check the leght of strokes is more than 1, and that in all the strokes, at least one is visbile TRUE
+    const visibleStrokes = strokes.filter(stroke => stroke.visible === true);
+    if (visibleStrokes.length === 0) return
+
+    // Then check if the strokeAlign is inside, center or outside to determine the canvas size
+    // If the strokeAlign is outside, we need to add the strokeTopWeight, strokeBottomWeight, strokeLeftWeight and strokeRightWeight to the canvas size
+    if (strokeAlign == 'INSIDE') {
+        deltaX = 0;
+        deltaY = 0;
+    }
+    // If the strokeAlign is center, half to the canvas size
+    else if (strokeAlign == 'CENTER') {
+        deltaX = (strokeLeftWeight + strokeRightWeight) / 2;
+        deltaY = (strokeTopWeight + strokeBottomWeight) / 2;
+    }
+    // If the strokeAlign is inside, we make the canvas size the same as the node size
+    else if (strokeAlign == 'OUTSIDE') {
+        deltaX = (strokeLeftWeight + strokeRightWeight);
+        deltaY = (strokeTopWeight + strokeBottomWeight);
+    }
+    width = config.node.width + deltaX;
+    height = config.node.height + deltaY;
+    x = config.x - deltaX / 2;
+    y = config.y - deltaY / 2;
+
+    // We create the canvas and context
+    const name = config.node.name.replace(/[^a-zA-Z0-9]/g, '') + 'Stroke';
+    const nodeCanvas = name + 'Canvas';
+    const nodeCtx = nodeCanvas + 'Ctx';
+    addCode(`
+        // '${config.node.name}' stroke
+        const ${nodeCanvas} = document.createElement('canvas');
+        ${nodeCanvas}.width = ${width};
+        ${nodeCanvas}.height = ${height};
+        const ${nodeCtx} = ${nodeCanvas}.getContext('2d'); `,
+        config.indent);
+
+    // First we clip the canvas based on the path at strokeGeometry[0].data with Path2D(pathData);
+    const path = strokeGeometry[0].data;
+    addCode(`
+        // clip with the stroke shape
+        const ${name}Path = new Path2D("${path}");
+        ${nodeCtx}.translate(${deltaX/2}, ${deltaY/2});
+        ${nodeCtx}.clip(${name}Path);`,
+        config.indent + 1);
+
+    // Then we fill it successively with all the strokes paints
+    for (let i = 0; i < strokes.length; i++) {
+        await exportPaint({ paint: strokes[i], parent: config.node, index: i+1, width:width, height:height, x:-deltaX/2, y:-deltaX/2, context: nodeCtx, indent: config.indent + 1 });
+    }
+
+    addCode(`
+        // Draw Stroke on parent
+        ${config.context}.drawImage(${nodeCanvas}, ${x}, ${y}); `,
+        config.indent + 1);
+}
+
+
+// MAIN NODE EXPORT FUNCTIONS
+
+/*
+    NODE 'type'
+        "BOOLEAN_OPERATION"
+        "CODE_BLOCK"
+        "COMPONENT"
+        "COMPONENT_SET"
+        "CONNECTOR"
+        "DOCUMENT"
+        "ELLIPSE"
+        "EMBED"
+        "FRAME"
+        "GROUP"
+        "INSTANCE"
+        "LINE"
+        "LINK_UNFURL"
+        "MEDIA"
+        "PAGE"
+        "POLYGON"
+        "RECTANGLE" ✅
+        "SHAPE_WITH_TEXT"
+        "SLICE"
+        "STAMP"
+        "STAR"
+        "STICKY"
+        "TABLE"
+        "TABLE_CELL"
+        "TEXT"
+        "TEXT_PATH"
+        "TRANSFORM_GROUP"
+        "VECTOR"
+        "WIDGET"
+*/
+async function exportNode(input){
+
+    // ----------------------------------
+    if(input.node.type == 'RECTANGLE') {
+        await exportRectangleNode(input)
+    }
+}
+async function exportRectangleNode(input) {
+    const node = input.node;
+    const indent = input.indent || 1;
+    const prefix = input.prefix || '';
+    const parentCtx = input.parentCtx || 'ctx';
+
+    const { visible, width, height, opacity, blendMode, x, y } = node;
+
+    // If the node is not 'VISIBLE'
+    if (!visible) return
+    // If the node has no FILLS or no STROKE
+    if (node.fills.length === 0 && node.strokeGeometry.length === 0) return
+
+    
+    // Canvas LAYER
+    const nodeName = prefix + node.name.replace(/[^a-zA-Z0-9]/g, '')
+    const nodeCanvas = nodeName + 'Canvas';
+    const nodeCtx = nodeCanvas + 'Ctx';
+    addCode(`
+        const ${nodeCanvas} = document.createElement('canvas');
+        ${nodeCanvas}.width = ${TOTAL_WIDTH};
+        ${nodeCanvas}.height = ${TOTAL_HEIGHT};
+        const ${nodeCtx} = ${nodeCanvas}.getContext('2d'); `,
+        indent);
+
+    // FILL
+    // --------------------
+    if (node.fills.length > 0) {
+
+        const fillCanvas = nodeName + 'Fill';
+        const fillCtx = fillCanvas + 'Ctx';
+        addCode(`
+            // '${nodeName}' fill
+            const ${fillCanvas} = document.createElement('canvas');
+            ${fillCanvas}.width = ${width};
+            ${fillCanvas}.height = ${height};
+            const ${fillCtx} = ${fillCanvas}.getContext('2d'); `,
+            indent + 1);
+
+        // We start with the round radius of the rectangle
+        if (node.topLeftRadius || node.topRightRadius || node.bottomLeftRadius || node.bottomRightRadius) {
+            clipCtxNodeOnRadius({node: node, context: fillCtx, indent: indent+2})
+        }
+        
+        // Then we paint the FILL
+        for (let i = 0; i < node.fills.length; i++) {
+            await exportPaint({ paint: node.fills[i], parent: node, index: i+1, context: fillCtx, indent: indent+2 });
+        }
+
+        addCode(`
+            // Draw Fill on '${nodeName}'
+            ${nodeCtx}.drawImage(${fillCanvas}, ${x}, ${y}); `,
+            indent + 2);
+    }
+
+    // STROKES
+    // --------------------
+    if (node.strokeGeometry.length > 0) {
+        await exportStroke({ node: node, context: nodeCtx, indent: indent+1, x: x, y: y });
+    }
+    
+    // To know which canvas export
+    let exportCanvas = nodeCanvas;
+
+    // EFFECTS
+    // --------------------
+    if (node.effects.length > 0) {
+        const effectCanvas = nodeName + 'CanvasWithEffects';
+        const effectCtx = effectCanvas + 'Ctx';
+        addCode(`
+            // '${nodeName}' effect
+            const ${effectCanvas} = document.createElement('canvas');
+            ${effectCanvas}.width = ${TOTAL_WIDTH};
+            ${effectCanvas}.height = ${TOTAL_HEIGHT};
+            const ${effectCtx} = ${effectCanvas}.getContext('2d'); 
+            ${effectCtx}.filter = ${convertEffects(node.effects)}
+            ${effectCtx}.drawImage(${nodeCanvas}, 0, 0) ;`,
+            indent + 1);
+        // Change the output canvas
+        exportCanvas = effectCanvas;
+    }
+
+    
+    // EXPORT
+    // ====================
+
+    // SAVE
+    // --------------------
+    addCode(`\n${parentCtx}.save();`, indent);
+
+    // BLEND MODE
+    // --------------------
+    if (blendMode != 'NORMAL') {
+        const composite = convertBlendMode(blendMode);
+        if (composite !== 'source-over' && composite !== 'unsupported') {
+            addCode(`${parentCtx}.globalCompositeOperation = '${composite}';`, indent);
+        }
+        else if(composite == 'unsupported'){
+            addCode(`// ⚠️ Blend mode "${blendMode}" is not supported in canvas. Using "source-over" (default) as fallback.`, indent);
+        }
+    }
+
+    // OPACITY
+    // --------------------
+    if (opacity != 1) addCode(`${parentCtx}.globalAlpha = ${Math.round(opacity * 10000) / 10000};`, indent);
+
+    // TARGET CANVAS
+    // --------------------
+    addCode(`${parentCtx}.drawImage(${exportCanvas}, 0, 0);`, indent);
+    addCode(`${parentCtx}.restore();`, indent);
+}
+
+
+// ---------------------
+// 😱 HELPER FUNCTIONS 😱
+// ---------------------
+
+// Set clip() for RECTANGLES with round radius
+function clipCtxNodeOnRadius(input) {
+    const config = {
+        context: input.context || 'ctx',
+        indent: input.indent || 2,
+        node: input.node,
+        x: input.x || 0,
+        y: input.y || 0,
+        width: input.width || input.node.width || width,
+        height: input.height || input.node.height || height,
+    }
+
+    const rTL = config.node.topLeftRadius;
+    const rTR = config.node.topRightRadius;
+    const rBR = config.node.bottomRightRadius;
+    const rBL = config.node.bottomLeftRadius;
+    const allEqual = rTL === rTR && rTL === rBR && rTL === rBL;
+
+    // If the four corner are the same
+    if (allEqual) {
+        // Uniform border-radius → use roundRect
+        addCode(`
+            // Clipped content (round radius)
+            ${config.context}.beginPath();
+            ${config.context}.roundRect(${config.x}, ${config.y}, ${config.width}, ${config.height}, ${rTL});
+            ${config.context}.clip(); `,
+            config.indent);
+    }
+    // If the four corners are differents
+    else {
+        addCode(`
+            // Clipped content (round radius)
+            ${config.context}.beginPath();
+            ${config.context}.moveTo(${config.x + rTL}, ${config.y});
+            ${config.context}.lineTo(${config.x + config.width - rTR}, ${config.y});
+            ${config.context}.quadraticCurveTo(${config.x + config.width}, ${config.y}, ${config.x + config.width}, ${config.y + rTR});
+            ${config.context}.lineTo(${config.x + config.width}, ${config.y + config.height - rBL});
+            ${config.context}.quadraticCurveTo(${config.x + config.width}, ${config.y + config.height}, ${config.x + config.width - rBL}, ${config.y + config.height});
+            ${config.context}.lineTo(${config.x + rBR}, ${config.y + config.height});
+            ${config.context}.quadraticCurveTo(${config.x}, ${config.y + config.height}, ${config.x}, ${config.y + config.height - rBR});
+            ${config.context}.lineTo(${config.x}, ${config.y + rTL});
+            ${config.context}.quadraticCurveTo(${config.x}, ${config.y}, ${config.x + rTL}, ${config.y});
+            ${config.context}.closePath();
+            ${config.context}.clip(); `,
+            config.indent);
+    }
+}
+// To convert {r: g: b: (a:)} to CSS 'rgba()'
+function convertColor(color) {
+    if (color.a !== undefined) return `rgba(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)}, ${Math.round(color.a * 100)/100})`
+    else return `rgb(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)})`;
+}
+// To convert blendMode to CSS blend modes
+function convertBlendMode(blendMode) {
+    switch (blendMode) {
+        case 'NORMAL':
+        case 'PASS_THROUGH':
+            return 'source-over';
+        case 'MULTIPLY':
+            return 'multiply';
+        case 'SCREEN':
+            return 'screen';
+        case 'OVERLAY':
+            return 'overlay';
+        case 'DARKEN':
+            return 'darken';
+        case 'LIGHTEN':
+            return 'lighten';
+        case 'COLOR_DODGE':
+        case 'LINEAR_DODGE': // Figma: Plus lighter
+            return 'color-dodge';
+        case 'COLOR_BURN':
+        case 'LINEAR_BURN': // Figma: Plus darker
+            return 'color-burn';
+        case 'HARD_LIGHT':
+            return 'hard-light';
+        case 'SOFT_LIGHT':
+            return 'soft-light';
+        case 'DIFFERENCE':
+            return 'difference';
+        case 'EXCLUSION':
+            return 'exclusion';
+        // Unsupported modes in canvas:
+        case 'HUE':
+        case 'SATURATION':
+        case 'COLOR':
+        case 'LUMINOSITY':
+        default:
+            return 'unsupported';
+    }
+}
+// To convert effects to CSS filter string
+function convertEffects(effects) {
+    if (!effects || effects.length === 0) return '';
+
+    const filters = [];
+    const comments = [];
+
+    for (const effect of effects) {
+        if (!effect.visible) continue;
+
+        switch (effect.type) {
+            case 'LAYER_BLUR':
+                filters.push(`blur(${Math.round(effect.radius * 100) / 100}px)`);
+                break;
+
+            case 'DROP_SHADOW':
+                const dx = Math.round(effect.offset.x * 100) / 100;
+                const dy = Math.round(effect.offset.y * 100) / 100;
+                const blur = Math.round(effect.radius * 100) / 100;
+                const spread = 0; // Figma doesn't expose spread directly
+                const color = convertColor(effect.color);
+                filters.push(`drop-shadow(${dx}px ${dy}px ${blur}px ${color})`);
+                break;
+
+            case 'BACKGROUND_BLUR':
+            case 'INNER_SHADOW':
+            default:
+                comments.push(`// ⚠️ ${effect.type} not supported in canvas/CSS`);
+                break;
+        }
+    }
+
+    const filterStr = filters.length ? `'${filters.join(' ')}';` : '';
+    const commentStr = comments.length ? comments.join('\n') : '';
+
+    let finalString = ''
+    if (filterStr) finalString += filterStr;
+    if (commentStr && filterStr) finalString += '\n';
+    if (commentStr) finalString += commentStr;
+
+    return finalString;
+}
+// Convert gradientTransform matrix to x y coordinates
+function convertGradientTransform(transform, node) {
+    // transform is a 2x3 matrix:
+    // [[a, c, e],
+    //  [b, d, f]]
+
+    // First, build the full 3x3 affine matrix so we can invert it
+    const a = transform[0][0];
+    const c = transform[0][1];
+    const e = transform[0][2];
+    const b = transform[1][0];
+    const d = transform[1][1];
+    const f = transform[1][2];
+
+    const matrix = [
+        [a, c, e],
+        [b, d, f],
+        [0, 0, 1]
+    ];
+
+    const inv = invert3x3(matrix);
+
+    // Identity matrix handle positions in 3x3 form
+    const identityMatrixHandlePositions = [
+        [0, 1, 0],
+        [0.5, 0.5, 1],
+        [1, 1, 1]
+    ]
+
+    // Apply the inverse gradient transform to standard gradient handle positions
+    const transformedHandles = multiply3x3(inv, identityMatrixHandlePositions);
+
+    // Extract the transformed handles and convert from relative [0–1] to absolute canvas coordinates
+    const startHandle = {
+        x: Math.round(transformedHandles[0][0] * node.width),
+        y: Math.round(transformedHandles[1][0] * node.height)
+    };
+
+    const endHandle = {
+        x: Math.round(transformedHandles[0][1] * node.width),
+        y: Math.round(transformedHandles[1][1] * node.height)
+    };
+
+    const centerHandle = {
+        x: Math.round(transformedHandles[0][2] * node.width),
+        y: Math.round(transformedHandles[1][2] * node.height)
+    };
+
+    // Return the 3 key handle positions used for gradient construction
+    return [startHandle, endHandle, centerHandle];
+}
+function invert3x3(m) {
+    const [
+        [a, b, c],
+        [d, e, f],
+        [g, h, i]
+    ] = m;
+
+    const A = e * i - f * h;
+    const B = -(d * i - f * g);
+    const C = d * h - e * g;
+    const D = -(b * i - c * h);
+    const E = a * i - c * g;
+    const F = -(a * h - b * g);
+    const G = b * f - c * e;
+    const H = -(a * f - c * d);
+    const I = a * e - b * d;
+
+    const det = a * A + b * B + c * C;
+
+    if (det === 0) throw new Error('Matrix not invertible');
+
+    const invDet = 1 / det;
+
+    return [
+        [A * invDet, D * invDet, G * invDet],
+        [B * invDet, E * invDet, H * invDet],
+        [C * invDet, F * invDet, I * invDet]
+    ];
+}
+function multiply3x3(a, b) {
+    const result = Array(3).fill(0).map(() => Array(3).fill(0));
+    for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 3; col++) {
+            for (let k = 0; k < 3; k++) {
+                result[row][col] += a[row][k] * b[k][col];
+            }
+        }
+    }
+    return result;
+}
+// Convert Image paint to Base64 string
+async function convertImagePaintToBase64(paint, width, height) {
+    if (paint.type !== 'IMAGE' || !paint.imageHash) {
+        console.log("Invalid image paint");
+    }
+
+    // 1. Create a temporary rectangle
+    const tempNode = figma.createRectangle();
+    tempNode.visible = true;
+    tempNode.resize(width, height);
+    tempNode.fills = [paint];
+
+    // 2. Export it
+    const bytes = await tempNode.exportAsync({ format: 'PNG' });
+    const base64 = uint8ToBase64(bytes);
+
+    // 3. Remove from document
+    tempNode.remove();
+
+    console.log(base64);
+
+    // 4. Return base64 string
+    return `data:image/png;base64,${base64}`;
+}
+
+// Helper to convert uint8 to Base64
+function uint8ToBase64(bytes) {
+    let binary = '';
+    const chunkSize = 8192; // Avoid call stack overflow
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.slice(i, i + chunkSize);
+        binary += String.fromCharCode(...chunk);
+    }
+    return base64Encode(binary);
+}
+// Tiny base64 polyfill (only used if nothing else is available)
+function base64Encode(str) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let output = '';
+    let i = 0;
+    while (i < str.length) {
+        const chr1 = str.charCodeAt(i++);
+        const chr2 = str.charCodeAt(i++);
+        const chr3 = str.charCodeAt(i++);
+        const enc1 = chr1 >> 2;
+        const enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+        const enc3 = isNaN(chr2) ? 64 : ((chr2 & 15) << 2) | (chr3 >> 6);
+        const enc4 = isNaN(chr3) ? 64 : (chr3 & 63);
+        output += chars.charAt(enc1) + chars.charAt(enc2) +
+                  chars.charAt(enc3) + chars.charAt(enc4);
+    }
     return output;
 }
 
-function exportNode(node) {
-    if (node.type === 'RECTANGLE') {
-        const { x, y, width, height } = node;
-        const fill = node.fills[0];
 
-        let code = `ctx.fillStyle = "${fill.color ? rgbToCss(fill.color) : '#000'}";\n`;
-        code += `ctx.fillRect(${x}, ${y}, ${width}, ${height});\n`;
-        return code;
-    } else if (node.type === 'TEXT') {
-        return `// TEXT: "${node.characters}" at (${node.x}, ${node.y})\n`;
+
+
+
+
+// ===============
+// 📠 WRITE CODE 📠
+// ===============
+
+function resetCode() {
+    code = ''
+}
+function addCode(text, indent = 1, atBeginning = false) {
+    const lines = text.split('\n');
+    const indentStr = '    '.repeat(indent);
+    const formatted = lines.map(line => indentStr + line.trim()).join('\n') + '\n';
+
+    if (atBeginning) {
+        code = formatted + code;
+    } else {
+        code += formatted;
     }
-    return `// Unsupported node type: ${node.type}\n`;
-}
-
-function rgbToCss(color) {
-    return `rgb(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)})`;
 }
 
 
-
-// ==============
-// USER SELECTION
-// ==============
+// ===================
+// 👇 USER SELECTION 👇
+// ===================
 
 figma.on("selectionchange", () => onSelectionUpdate());
 
