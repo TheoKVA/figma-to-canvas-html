@@ -80,8 +80,8 @@ async function exportSelection(selection) {
     // At the moment we only check the selection[0] and assume it is a frame
     // Later we will add support to groups and eclectic selection
     const frame = selection[0];
-    TOTAL_WIDTH = frame.width;
-    TOTAL_HEIGHT = frame.height;
+    TOTAL_WIDTH = round(frame.width);
+    TOTAL_HEIGHT = round(frame.height);
 
     console.log(frame);
 
@@ -98,19 +98,26 @@ async function exportSelection(selection) {
 
     // ------------
     // INSTRUCTIONS
-    // ------------
-    
-    // Main frame
-    // ========================= `,
+    // ------------`,
     1);
 
+    const frameHasRadius = frame.topLeftRadius || frame.topRightRadius || frame.bottomLeftRadius || frame.bottomRightRadius;
+    const frameHasFills = frame.fills.length > 0;
+    
+    if (frameHasRadius || frameHasFills) {
+        addCode(`\n
+        // Main frame
+        // ========================= `,
+        1);
+    }
+
     // We start with the round radius of the frame itself
-    if (frame.topLeftRadius || frame.topRightRadius || frame.bottomLeftRadius || frame.bottomRightRadius) {
-        clipCtxNodeOnRadius({node: frame, x: 0, y: 0, context: 'ctx', indent:2})
+    if (frameHasRadius) {
+        exportRectangleRadius({node: frame, x: 0, y: 0, context: 'ctx', indent:2})
     }
 
     // Then we do all the fill paints
-    if (frame.fills.length > 0) {
+    if (frameHasFills) {
         for (let i = 0; i < frame.fills.length; i++) {
             await exportPaint({ paint: frame.fills[i], parent: frame, index: i+1, context: 'ctx', indent: 2 });
         }
@@ -118,18 +125,7 @@ async function exportSelection(selection) {
 
     // Then we make all the childrens recursivelly
     for(const child of frame.children ) {
-
-        console.log(child);
-        // console.log(child.type);
-        // console.log(child.name);
-
-        addCode(`\n
-            // Layer '${child.name}'
-            // =========================` ,
-            1)
-
-        await exportNode({ node: child, index: 2, parentCtx: 'ctx' })
-
+        await exportNode({ node: child, parentCtx: 'ctx' })
     }
 
     // Then we do the stroke of the frame
@@ -144,10 +140,6 @@ async function exportSelection(selection) {
     addCode(`
     })(); `,
     0)
-
-
-    // INTRODUCTION 
-    // --------------------
 
     // Check if any image was loaded
     if (Object.keys(imageData).length > 0) {
@@ -201,6 +193,299 @@ async function loadImageData(input) {
 
 
 
+// MAIN NODE EXPORT FUNCTIONS
+
+/*
+    NODE 'type'
+        "BOOLEAN_OPERATION"
+        "CODE_BLOCK"
+        "COMPONENT"
+        "COMPONENT_SET"
+        "CONNECTOR"
+        "DOCUMENT"
+        "ELLIPSE" 👋
+        "EMBED"
+        "FRAME" 👋
+        "GROUP" 👋
+        "INSTANCE"
+        "LINE" 👋
+        "LINK_UNFURL"
+        "MEDIA"
+        "PAGE"
+        "POLYGON" 👋
+        "RECTANGLE" ✅
+        "SHAPE_WITH_TEXT"
+        "SLICE"
+        "STAMP"
+        "STAR" 🤔
+        "STICKY"
+        "TABLE"
+        "TABLE_CELL"
+        "TEXT" ✅
+        "TEXT_PATH"
+        "TRANSFORM_GROUP"
+        "VECTOR" 👋
+        "WIDGET"
+*/
+async function exportNode(input){
+    /*
+        { 
+            node: child,
+            parentCtx: 'ctx'
+        }
+    */
+
+    console.log(input.node);
+
+    addCode(`\n
+        // Layer '${input.node.name}'
+        // =========================` ,
+        1)
+
+    // ----------------------------------
+    if(input.node.type == 'RECTANGLE') {
+        await exportRectangleNode(input)
+    }
+
+    // ----------------------------------
+    if(input.node.type == 'TEXT') {
+        await exportTextNode(input)
+    }
+
+
+}
+
+async function exportRectangleNode(input) {
+    const node = input.node;
+    const prefix = input.prefix || '';
+    const parentCtx = input.parentCtx || 'ctx';
+    const indent = input.indent || 1;
+
+    const { visible, width, height, opacity, blendMode, x, y } = node;
+
+    // If the node is not 'VISIBLE'
+    if (!visible) return
+    // If the node has no FILLS or no STROKE
+    if (node.fills.length === 0 && node.strokeGeometry.length === 0) return
+
+    // We check what we have
+    const nodeHasFills = node.fills.length > 0;
+    const nodeHasStroke = node.strokeGeometry.length > 0;
+    const nodeHasEffects = node.effects.length > 0;
+    const nodeHasRadius = node.topLeftRadius || node.topRightRadius || node.bottomLeftRadius || node.bottomRightRadius;
+    
+    // Canvas LAYER
+    const nodeName = prefix + toCamelCase(node.name);
+    const nodeCanvas = nodeName + 'Canvas';
+    const nodeCtx = nodeCanvas + 'Ctx';
+    addCode(`
+        const ${nodeCanvas} = document.createElement('canvas');
+        ${nodeCanvas}.width = ${TOTAL_WIDTH};
+        ${nodeCanvas}.height = ${TOTAL_HEIGHT};
+        const ${nodeCtx} = ${nodeCanvas}.getContext('2d'); `,
+        indent);
+
+    // FILL
+    // --------------------
+    if(nodeHasFills && !nodeHasStroke) {
+        // We start with the round radius of the rectangle
+        if (nodeHasRadius) {
+            exportRectangleRadius({node: node, context: nodeCtx, indent: indent+1});
+        }
+        // Then we paint the FILL
+        for (let i = 0; i < node.fills.length; i++) {
+            await exportPaint({ paint: node.fills[i], parent: node, index: i+1, context: nodeCtx, indent: indent+1});
+        }
+    }
+    if (nodeHasFills && nodeHasStroke) {
+
+        const fillCanvas = nodeName + 'Fill';
+        const fillCtx = fillCanvas + 'Ctx';
+        addCode(`
+            // '${nodeName}' fill
+            const ${fillCanvas} = document.createElement('canvas');
+            ${fillCanvas}.width = ${round(width)};
+            ${fillCanvas}.height = ${round(height)};
+            const ${fillCtx} = ${fillCanvas}.getContext('2d'); `,
+            indent + 1);
+
+        // We start with the round radius of the rectangle
+        if (node.topLeftRadius || node.topRightRadius || node.bottomLeftRadius || node.bottomRightRadius) {
+            exportRectangleRadius({node: node, context: fillCtx, indent: indent+2})
+        }
+        
+        // Then we paint the FILL
+        for (let i = 0; i < node.fills.length; i++) {
+            await exportPaint({ paint: node.fills[i], parent: node, index: i+1, context: fillCtx, indent: indent+2 });
+        }
+
+        addCode(`
+            // Draw Fill on '${nodeName}'
+            ${nodeCtx}.drawImage(${fillCanvas}, ${round(x)}, ${round(y)}); `,
+            indent + 2);
+    }
+
+    // STROKES
+    // --------------------
+    if(!nodeHasFills && nodeHasStroke) {
+        await exportStroke({ node: node, context: nodeCtx, indent: indent, x: x, y: y });
+    }
+    if (nodeHasFills && nodeHasStroke) {
+        await exportStroke({ node: node, context: nodeCtx, indent: indent+1, x: x, y: y });
+    }
+    
+    // To know which canvas export
+    let exportCanvas = nodeCanvas;
+
+    // EFFECTS
+    // --------------------
+    if (nodeHasEffects) {
+        const effectCanvas = nodeName + 'CanvasWithEffects';
+        const effectCtx = effectCanvas + 'Ctx';
+        addCode(`
+            // '${nodeName}' effect
+            const ${effectCanvas} = document.createElement('canvas');
+            ${effectCanvas}.width = ${TOTAL_WIDTH};
+            ${effectCanvas}.height = ${TOTAL_HEIGHT};
+            const ${effectCtx} = ${effectCanvas}.getContext('2d'); 
+            ${effectCtx}.filter = ${convertEffects(node.effects)}
+            ${effectCtx}.drawImage(${nodeCanvas}, 0, 0) ;`,
+            indent + 1);
+        // Change the output canvas
+        exportCanvas = effectCanvas;
+    }
+
+    // EXPORT
+    // --------------------
+    addCode(`\n${parentCtx}.save();`, indent);
+
+    // BLEND MODE
+    if (blendMode != 'NORMAL') {
+        const composite = convertBlendMode(blendMode);
+        if (composite !== 'source-over' && composite !== 'unsupported') {
+            addCode(`${parentCtx}.globalCompositeOperation = '${composite}';`, indent);
+        }
+        else if(composite == 'unsupported'){
+            addCode(`// ⚠️ Blend mode "${blendMode}" is not supported in canvas. Using "source-over" (default) as fallback.`, indent);
+        }
+    }
+    // OPACITY
+    if (opacity != 1) addCode(`${parentCtx}.globalAlpha = ${round(opacity)};`, indent);
+
+    // TARGET CANVAS
+    addCode(`${parentCtx}.drawImage(${exportCanvas}, 0, 0);`, indent);
+    addCode(`${parentCtx}.restore();`, indent);
+}
+
+async function exportTextNode(input) {
+    const node = input.node;
+    const prefix = input.prefix || '';
+    const parentCtx = input.parentCtx || 'ctx';
+    const indent = input.indent || 1;
+
+    const { visible, width, height, opacity, blendMode, x, y, strokeGeometry, fillGeometry, fills } = node;
+    
+    // If the node is not 'VISIBLE'
+    if (!visible) return
+    // If the node has no FILLS or no STROKE
+    if (node.fills.length === 0 && strokeGeometry.length === 0) return
+
+    // First we initiate the canvas LAYER
+    const nodeName = 'text_' + prefix + toCamelCase(node.name);
+    const nodeCanvas = nodeName + 'Canvas';
+    const nodeCtx = nodeCanvas + 'Ctx';
+    addCode(`
+        const ${nodeCanvas} = document.createElement('canvas');
+        ${nodeCanvas}.width = ${TOTAL_WIDTH};
+        ${nodeCanvas}.height = ${TOTAL_HEIGHT};
+        const ${nodeCtx} = ${nodeCanvas}.getContext('2d'); `,
+        indent);
+        
+    // STROKE (IF 'OUTSIDE' IT GOES BELOW)
+    // --------------------
+    if (node.strokeGeometry.length > 0 && node.strokeAlign === 'OUTSIDE') {
+        await exportStroke({ node: node, context: nodeCtx, indent: indent+1, x: x, y: y });
+    }
+
+    // FILL
+    // --------------------
+    if (node.fills.length > 0) {
+
+        const fillCanvas = nodeName + 'Fill';
+        const fillCtx = fillCanvas + 'Ctx';
+        addCode(`
+            // '${nodeName}' fill
+            const ${fillCanvas} = document.createElement('canvas');
+            ${fillCanvas}.width = ${round(width)};
+            ${fillCanvas}.height = ${round(height)};
+            const ${fillCtx} = ${fillCanvas}.getContext('2d'); 
+            
+            // clip with the text shape
+            const ${nodeName}Path = new Path2D("${fillGeometry[0].data}");
+            ${fillCtx}.clip(${nodeName}Path); `,
+            indent + 1);
+            // ${nodeCtx}.translate(${deltaX/2}, ${deltaY/2});
+
+        // Then we paint the FILL
+        for (let i = 0; i < fills.length; i++) {
+            await exportPaint({ paint: fills[i], parent: node, index: i+1, width:width, height:height, x:0, y:0, context: fillCtx, indent: indent+2 });
+        }
+
+        addCode(`
+            // Draw Fills on parent
+            ${nodeCtx}.drawImage(${fillCanvas}, ${round(x)}, ${round(y)}); `,
+            indent + 2);
+    }
+
+    // STROKE (IF NOT 'OUTSIDE')
+    // --------------------
+    if (node.strokeGeometry.length > 0  && node.strokeAlign !== 'OUTSIDE') {
+        await exportStroke({ node: node, context: nodeCtx, indent: indent+1, x: x, y: y });
+    }
+    
+    // To know which canvas export
+    let exportCanvas = nodeCanvas;
+
+    // EFFECTS
+    // --------------------
+    if (node.effects.length > 0) {
+        const effectCanvas = nodeName + 'CanvasWithEffects';
+        const effectCtx = effectCanvas + 'Ctx';
+        addCode(`
+            // '${nodeName}' effect
+            const ${effectCanvas} = document.createElement('canvas');
+            ${effectCanvas}.width = ${TOTAL_WIDTH};
+            ${effectCanvas}.height = ${TOTAL_HEIGHT};
+            const ${effectCtx} = ${effectCanvas}.getContext('2d'); 
+            ${effectCtx}.filter = ${convertEffects(node.effects)}
+            ${effectCtx}.drawImage(${nodeCanvas}, 0, 0) ;`,
+            indent + 1);
+        // Change the output canvas
+        exportCanvas = effectCanvas;
+    }
+
+    // EXPORT
+    // --------------------
+    addCode(`\n${parentCtx}.save();`, indent);
+
+    // BLEND MODE
+    if (blendMode != 'NORMAL') {
+        const composite = convertBlendMode(blendMode);
+        if (composite !== 'source-over' && composite !== 'unsupported') {
+            addCode(`${parentCtx}.globalCompositeOperation = '${composite}';`, indent);
+        }
+        else if(composite == 'unsupported'){
+            addCode(`// ⚠️ Blend mode "${blendMode}" is not supported in canvas. Using "source-over" (default) as fallback.`, indent);
+        }
+    }
+    // OPACITY
+    if (opacity != 1) addCode(`${parentCtx}.globalAlpha = ${round(opacity)}`, indent);
+
+    // TARGET CANVAS
+    addCode(`${parentCtx}.drawImage(${exportCanvas}, 0, 0);`, indent);
+    addCode(`${parentCtx}.restore();`, indent);
+}
+
 // MAIN EXPORT FUNCTIONS
 
 /*
@@ -241,20 +526,20 @@ async function exportPaint(input) {
             instructions += `// ⚠️ Blend mode "${blendMode}" is not supported in canvas. Using "source-over" (default) as fallback.`
         }
     }
-    if (opacity != 1) instructions += `${config.context}.globalAlpha = ${Math.round(opacity * 10000) / 10000}; \n`;
+    if (opacity != 1) instructions += `${config.context}.globalAlpha = ${round(opacity)}; \n`;
 
 
     // ----------------------------------
     if (type == 'SOLID') {
         // Add the color
         instructions += `${config.context}.fillStyle = "${convertColor(color)}"; \n`;
-        instructions += `${config.context}.fillRect(${config.x}, ${config.y}, ${config.width}, ${config.height});`;
+        instructions += `${config.context}.fillRect(${round(config.x)}, ${round(config.y)}, ${round(config.width)}, ${round(config.height)});`;
     }
 
     // ----------------------------------
     if (type == 'GRADIENT_LINEAR') {
         // Generate a unique name for the graditent
-        let gradientName = `${config.parent.name.replace(/[^a-zA-Z0-9]/g, '')}_gradientFill${config.index}`;
+        let gradientName = `${toCamelCase(config.parent.name)}_gradientFill${config.index}`;
         // Find the x y coordinates of the handles
         let coordinates = convertGradientTransform(config.paint.gradientTransform, config.parent);
         // Add the gradient
@@ -265,7 +550,7 @@ async function exportPaint(input) {
         }
         // Add the fill
         instructions += `${config.context}.fillStyle = ${gradientName}; \n`;
-        instructions += `${config.context}.fillRect(${config.x}, ${config.y}, ${config.width}, ${config.height});`;
+        instructions += `${config.context}.fillRect(${round(config.x)}, ${round(config.y)}, ${round(config.width)}, ${round(config.height)});`;
     }
 
     // ----------------------------------
@@ -273,17 +558,16 @@ async function exportPaint(input) {
         if (!config.paint.imageHash) {
             instructions += `// ⚠️ Image hash missing for image fill.\n`;
         } else {
-            const imageId = `${config.parent.name.replace(/[^a-zA-Z0-9]/g, '')}_image${config.index}`;
+            const imageId = `${toCamelCase(config.parent.name)}_${config.index}`;
             // const base64 = await getBase64FromImageFill(config.paint, );
             const base64 = await convertImagePaintToBase64(config.paint, config.width, config.height);
 
             // Add to global imageData object
             if (!imageData[imageId]) {
-                console.log('Adding data')
                 imageData[imageId] = base64;
             }
             // Add the istructions
-            instructions += `${config.context}.drawImage(images["${imageId}"], ${config.x}, ${config.y}, ${config.width}, ${config.height});`;
+            instructions += `${config.context}.drawImage(images["${imageId}"], ${round(config.x)}, ${round(config.y)}, ${round(config.width)}, ${round(config.height)});`;
         }
     }
 
@@ -295,6 +579,8 @@ async function exportPaint(input) {
         ${config.context}.restore(); `,
         config.indent)
 }
+
+// Function to export the stroke in the code
 async function exportStroke(input) {
     const config = {
         node: input.node, // Important
@@ -311,6 +597,7 @@ async function exportStroke(input) {
         strokeBottomWeight,
         strokeLeftWeight, 
         strokeRightWeight,
+        strokeWeight,
         strokeAlign } = config.node;
 
     let width, height, x, y, deltaX, deltaY;
@@ -320,20 +607,20 @@ async function exportStroke(input) {
     if (visibleStrokes.length === 0) return
 
     // Then check if the strokeAlign is inside, center or outside to determine the canvas size
-    // If the strokeAlign is outside, we need to add the strokeTopWeight, strokeBottomWeight, strokeLeftWeight and strokeRightWeight to the canvas size
+    // If the strokeAlign is inside, we make the canvas size the same as the node size
     if (strokeAlign == 'INSIDE') {
         deltaX = 0;
         deltaY = 0;
     }
     // If the strokeAlign is center, half to the canvas size
     else if (strokeAlign == 'CENTER') {
-        deltaX = (strokeLeftWeight + strokeRightWeight) / 2;
-        deltaY = (strokeTopWeight + strokeBottomWeight) / 2;
+        deltaX = strokeLeftWeight ? (strokeLeftWeight + strokeRightWeight)/2 : strokeWeight;
+        deltaY = strokeTopWeight ? (strokeTopWeight + strokeBottomWeight)/2 : strokeWeight;
     }
-    // If the strokeAlign is inside, we make the canvas size the same as the node size
+    // If the strokeAlign is outside, we need to add the strokeTopWeight, strokeBottomWeight, strokeLeftWeight and strokeRightWeight to the canvas size
     else if (strokeAlign == 'OUTSIDE') {
-        deltaX = (strokeLeftWeight + strokeRightWeight);
-        deltaY = (strokeTopWeight + strokeBottomWeight);
+        deltaX = strokeLeftWeight ? (strokeLeftWeight + strokeRightWeight) : strokeWeight*2;
+        deltaY = strokeTopWeight ? (strokeTopWeight + strokeBottomWeight) : strokeWeight*2;
     }
     width = config.node.width + deltaX;
     height = config.node.height + deltaY;
@@ -341,14 +628,14 @@ async function exportStroke(input) {
     y = config.y - deltaY / 2;
 
     // We create the canvas and context
-    const name = config.node.name.replace(/[^a-zA-Z0-9]/g, '') + 'Stroke';
+    const name = toCamelCase(config.node.name) + 'Stroke';
     const nodeCanvas = name + 'Canvas';
     const nodeCtx = nodeCanvas + 'Ctx';
     addCode(`
         // '${config.node.name}' stroke
         const ${nodeCanvas} = document.createElement('canvas');
-        ${nodeCanvas}.width = ${width};
-        ${nodeCanvas}.height = ${height};
+        ${nodeCanvas}.width = ${round(width)};
+        ${nodeCanvas}.height = ${round(height)};
         const ${nodeCtx} = ${nodeCanvas}.getContext('2d'); `,
         config.indent);
 
@@ -368,171 +655,12 @@ async function exportStroke(input) {
 
     addCode(`
         // Draw Stroke on parent
-        ${config.context}.drawImage(${nodeCanvas}, ${x}, ${y}); `,
+        ${config.context}.drawImage(${nodeCanvas}, ${round(x)}, ${round(y)}); `,
         config.indent + 1);
 }
 
-
-// MAIN NODE EXPORT FUNCTIONS
-
-/*
-    NODE 'type'
-        "BOOLEAN_OPERATION"
-        "CODE_BLOCK"
-        "COMPONENT"
-        "COMPONENT_SET"
-        "CONNECTOR"
-        "DOCUMENT"
-        "ELLIPSE"
-        "EMBED"
-        "FRAME"
-        "GROUP"
-        "INSTANCE"
-        "LINE"
-        "LINK_UNFURL"
-        "MEDIA"
-        "PAGE"
-        "POLYGON"
-        "RECTANGLE" ✅
-        "SHAPE_WITH_TEXT"
-        "SLICE"
-        "STAMP"
-        "STAR"
-        "STICKY"
-        "TABLE"
-        "TABLE_CELL"
-        "TEXT"
-        "TEXT_PATH"
-        "TRANSFORM_GROUP"
-        "VECTOR"
-        "WIDGET"
-*/
-async function exportNode(input){
-
-    // ----------------------------------
-    if(input.node.type == 'RECTANGLE') {
-        await exportRectangleNode(input)
-    }
-}
-async function exportRectangleNode(input) {
-    const node = input.node;
-    const indent = input.indent || 1;
-    const prefix = input.prefix || '';
-    const parentCtx = input.parentCtx || 'ctx';
-
-    const { visible, width, height, opacity, blendMode, x, y } = node;
-
-    // If the node is not 'VISIBLE'
-    if (!visible) return
-    // If the node has no FILLS or no STROKE
-    if (node.fills.length === 0 && node.strokeGeometry.length === 0) return
-
-    
-    // Canvas LAYER
-    const nodeName = prefix + node.name.replace(/[^a-zA-Z0-9]/g, '')
-    const nodeCanvas = nodeName + 'Canvas';
-    const nodeCtx = nodeCanvas + 'Ctx';
-    addCode(`
-        const ${nodeCanvas} = document.createElement('canvas');
-        ${nodeCanvas}.width = ${TOTAL_WIDTH};
-        ${nodeCanvas}.height = ${TOTAL_HEIGHT};
-        const ${nodeCtx} = ${nodeCanvas}.getContext('2d'); `,
-        indent);
-
-    // FILL
-    // --------------------
-    if (node.fills.length > 0) {
-
-        const fillCanvas = nodeName + 'Fill';
-        const fillCtx = fillCanvas + 'Ctx';
-        addCode(`
-            // '${nodeName}' fill
-            const ${fillCanvas} = document.createElement('canvas');
-            ${fillCanvas}.width = ${width};
-            ${fillCanvas}.height = ${height};
-            const ${fillCtx} = ${fillCanvas}.getContext('2d'); `,
-            indent + 1);
-
-        // We start with the round radius of the rectangle
-        if (node.topLeftRadius || node.topRightRadius || node.bottomLeftRadius || node.bottomRightRadius) {
-            clipCtxNodeOnRadius({node: node, context: fillCtx, indent: indent+2})
-        }
-        
-        // Then we paint the FILL
-        for (let i = 0; i < node.fills.length; i++) {
-            await exportPaint({ paint: node.fills[i], parent: node, index: i+1, context: fillCtx, indent: indent+2 });
-        }
-
-        addCode(`
-            // Draw Fill on '${nodeName}'
-            ${nodeCtx}.drawImage(${fillCanvas}, ${x}, ${y}); `,
-            indent + 2);
-    }
-
-    // STROKES
-    // --------------------
-    if (node.strokeGeometry.length > 0) {
-        await exportStroke({ node: node, context: nodeCtx, indent: indent+1, x: x, y: y });
-    }
-    
-    // To know which canvas export
-    let exportCanvas = nodeCanvas;
-
-    // EFFECTS
-    // --------------------
-    if (node.effects.length > 0) {
-        const effectCanvas = nodeName + 'CanvasWithEffects';
-        const effectCtx = effectCanvas + 'Ctx';
-        addCode(`
-            // '${nodeName}' effect
-            const ${effectCanvas} = document.createElement('canvas');
-            ${effectCanvas}.width = ${TOTAL_WIDTH};
-            ${effectCanvas}.height = ${TOTAL_HEIGHT};
-            const ${effectCtx} = ${effectCanvas}.getContext('2d'); 
-            ${effectCtx}.filter = ${convertEffects(node.effects)}
-            ${effectCtx}.drawImage(${nodeCanvas}, 0, 0) ;`,
-            indent + 1);
-        // Change the output canvas
-        exportCanvas = effectCanvas;
-    }
-
-    
-    // EXPORT
-    // ====================
-
-    // SAVE
-    // --------------------
-    addCode(`\n${parentCtx}.save();`, indent);
-
-    // BLEND MODE
-    // --------------------
-    if (blendMode != 'NORMAL') {
-        const composite = convertBlendMode(blendMode);
-        if (composite !== 'source-over' && composite !== 'unsupported') {
-            addCode(`${parentCtx}.globalCompositeOperation = '${composite}';`, indent);
-        }
-        else if(composite == 'unsupported'){
-            addCode(`// ⚠️ Blend mode "${blendMode}" is not supported in canvas. Using "source-over" (default) as fallback.`, indent);
-        }
-    }
-
-    // OPACITY
-    // --------------------
-    if (opacity != 1) addCode(`${parentCtx}.globalAlpha = ${Math.round(opacity * 10000) / 10000};`, indent);
-
-    // TARGET CANVAS
-    // --------------------
-    addCode(`${parentCtx}.drawImage(${exportCanvas}, 0, 0);`, indent);
-    addCode(`${parentCtx}.restore();`, indent);
-}
-
-
-// ---------------------
-// 😱 HELPER FUNCTIONS 😱
-// ---------------------
-
 // Set clip() for RECTANGLES with round radius
-function clipCtxNodeOnRadius(input) {
+function exportRectangleRadius(input) {
     const config = {
         context: input.context || 'ctx',
         indent: input.indent || 2,
@@ -543,10 +671,10 @@ function clipCtxNodeOnRadius(input) {
         height: input.height || input.node.height || height,
     }
 
-    const rTL = config.node.topLeftRadius;
-    const rTR = config.node.topRightRadius;
-    const rBR = config.node.bottomRightRadius;
-    const rBL = config.node.bottomLeftRadius;
+    const rTL = round(config.node.topLeftRadius);
+    const rTR = round(config.node.topRightRadius);
+    const rBR = round(config.node.bottomRightRadius);
+    const rBL = round(config.node.bottomLeftRadius);
     const allEqual = rTL === rTR && rTL === rBR && rTL === rBL;
 
     // If the four corner are the same
@@ -555,7 +683,7 @@ function clipCtxNodeOnRadius(input) {
         addCode(`
             // Clipped content (round radius)
             ${config.context}.beginPath();
-            ${config.context}.roundRect(${config.x}, ${config.y}, ${config.width}, ${config.height}, ${rTL});
+            ${config.context}.roundRect(${round(config.x)}, ${round(config.y)}, ${round(config.width)}, ${round(config.height)}, ${rTL});
             ${config.context}.clip(); `,
             config.indent);
     }
@@ -578,9 +706,15 @@ function clipCtxNodeOnRadius(input) {
             config.indent);
     }
 }
+
+
+// ---------------------
+// 😱 HELPER FUNCTIONS 😱
+// ---------------------
+
 // To convert {r: g: b: (a:)} to CSS 'rgba()'
 function convertColor(color) {
-    if (color.a !== undefined) return `rgba(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)}, ${Math.round(color.a * 100)/100})`
+    if (color.a !== undefined) return `rgba(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)}, ${round(color.a)})`
     else return `rgb(${Math.round(color.r * 255)}, ${Math.round(color.g * 255)}, ${Math.round(color.b * 255)})`;
 }
 // To convert blendMode to CSS blend modes
@@ -634,13 +768,13 @@ function convertEffects(effects) {
 
         switch (effect.type) {
             case 'LAYER_BLUR':
-                filters.push(`blur(${Math.round(effect.radius * 100) / 100}px)`);
+                filters.push(`blur(${round(effect.radius)}px)`);
                 break;
 
             case 'DROP_SHADOW':
-                const dx = Math.round(effect.offset.x * 100) / 100;
-                const dy = Math.round(effect.offset.y * 100) / 100;
-                const blur = Math.round(effect.radius * 100) / 100;
+                const dx = round(effect.offset.x);
+                const dy = round(effect.offset.y);
+                const blur = round(effect.radius);
                 const spread = 0; // Figma doesn't expose spread directly
                 const color = convertColor(effect.color);
                 filters.push(`drop-shadow(${dx}px ${dy}px ${blur}px ${color})`);
@@ -774,12 +908,9 @@ async function convertImagePaintToBase64(paint, width, height) {
     // 3. Remove from document
     tempNode.remove();
 
-    console.log(base64);
-
     // 4. Return base64 string
     return `data:image/png;base64,${base64}`;
 }
-
 // Helper to convert uint8 to Base64
 function uint8ToBase64(bytes) {
     let binary = '';
@@ -809,7 +940,23 @@ function base64Encode(str) {
     return output;
 }
 
-
+// For texts
+function toCamelCase(name) {
+    return name
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 5)
+        .map((word, i) => {
+            const clean = word.replace(/[^a-zA-Z0-9]/g, '');
+            if (i === 0) return clean.toLowerCase();
+            return clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
+        })
+        .join('');
+}
+// To round the numbers to the precision decimal
+function round(num, precision = 2) {
+    return Number (Math.round(num * Math.pow(10, precision)) / Math.pow(10, precision));
+}
 
 
 

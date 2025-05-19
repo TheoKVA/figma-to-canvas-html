@@ -34,7 +34,9 @@
                 tab-size: 2;             /* Makes indentation prettier */
             }
         </style>
-        <button id="js-copy" style="">Copy to clipboard</button>
+        <button id="js-copy">Copy to clipboard</button>
+
+        <canvas id="myCanvas" width="0" height="0" style="width: 100%;"></canvas>
 
     </div>
 </body>
@@ -69,7 +71,7 @@
 
         if (msg.type === 'export-selection') {
             document.getElementById('js-output').value = msg.data;
-
+            eval(msg.data);
         }
     };
 
@@ -85,7 +87,7 @@
 
     button.addEventListener('click', () => {
         textarea.select();
-        textarea.setSelectionRange(0, 99999); // For mobile compatibility
+        textarea.setSelectionRange(0, 999999); // For mobile compatibility
 
         const successful = document.execCommand('copy');
         if (successful) {

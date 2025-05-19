@@ -34,14 +34,10 @@ async function loadImageData(input) {
     const images = await loadImageData(imageData);
     // const images = await loadImageData('your-image-data.json');
 
-    // Global variables
-    const width = 100;
-    const height = 100;
-
     // Target canvas
     const canvas = document.getElementById("myCanvas");
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = 100;
+    canvas.height = 100;
     const ctx = canvas.getContext("2d");
 
     // ------------
@@ -98,8 +94,8 @@ async function loadImageData(input) {
     // =========================
 
         const rect1Canvas = document.createElement('canvas');
-        rect1Canvas.width = width;
-        rect1Canvas.height = height;
+        rect1Canvas.width = 100;
+        rect1Canvas.height = 100;
         const rect1Ctx = rect1Canvas.getContext('2d');
 
             // Fill image
@@ -129,15 +125,15 @@ async function loadImageData(input) {
     // =========================
 
         const group2Canvas = document.createElement('canvas');
-        group2Canvas.width = width;
-        group2Canvas.height = height;
+        group2Canvas.width = 100;
+        group2Canvas.height = 100;
         const group2Ctx = group2Canvas.getContext('2d');
 
             // > 'group 1 > Rect 1'
             // -------------------------
             const group2rect1Canvas = document.createElement('canvas');
-            group2rect1Canvas.width = width;
-            group2rect1Canvas.height = height;
+            group2rect1Canvas.width = 100;
+            group2rect1Canvas.height = 100;
             const group2rect1Ctx = group2rect1Canvas.getContext('2d');
 
                 // Draw fills of the rectangle
@@ -153,8 +149,8 @@ async function loadImageData(input) {
             // > 'group 1 > Rect 2'
             // -------------------------
             const group2rect2Canvas = document.createElement('canvas');
-            group2rect2Canvas.width = width;
-            group2rect2Canvas.height = height;
+            group2rect2Canvas.width = 100;
+            group2rect2Canvas.height = 100;
             const group2rect2Ctx = group2rect2Canvas.getContext('2d');
 
                 // Draw fills of the rectangle
@@ -178,14 +174,14 @@ async function loadImageData(input) {
     // =========================
 
         const maskgroup3Canvas = document.createElement('canvas');
-        maskgroup3Canvas.width = width;
-        maskgroup3Canvas.height = height;
+        maskgroup3Canvas.width = 100;
+        maskgroup3Canvas.height = 100;
         const maskgroup3Ctx = maskgroup3Canvas.getContext('2d');
 
             // > 'mask group 3' content
             const maskgroup3ContentCanvas = document.createElement('canvas');
-            maskgroup3ContentCanvas.width = width;
-            maskgroup3ContentCanvas.height = height;
+            maskgroup3ContentCanvas.width = 100;
+            maskgroup3ContentCanvas.height = 100;
             const maskgroup3ContentCtx = maskgroup3ContentCanvas.getContext('2d');
 
                 // Draw
@@ -194,8 +190,8 @@ async function loadImageData(input) {
 
             // > 'mask group 3' Mask
             const maskgroup3MaskCanvas = document.createElement('canvas');
-            maskgroup3MaskCanvas.width = width;
-            maskgroup3MaskCanvas.height = height;
+            maskgroup3MaskCanvas.width = 100;
+            maskgroup3MaskCanvas.height = 100;
             const maskgroup3MaskCtx = maskgroup3MaskCanvas.getContext('2d');
 
 
@@ -227,14 +223,15 @@ async function loadImageData(input) {
 
 })();
 
+// Faire que un canvas si que un fill ou un stroke
+
 // Faire les groupes
 // Faire les masks
+// Finir les textes
+    // Commenter la position etc pour remettre manuellement ?
 
 // LATER
 //
-// Faire les textes
-    // Sortir uniquement les paths en svg
-    // Commenter la position etc pour remettre manuellement ?
 // Faire les autres shapes
 // Faire les dégradés radiaux
 // Faire les strokes !
